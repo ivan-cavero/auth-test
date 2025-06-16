@@ -1,77 +1,62 @@
 <template>
-  <div class="admin-container">
-    <header>
-      <h1>TimeFly Admin (Debug Panel)</h1>
-      <div class="session-actions">
-        <button @click="loginWithGoogle">Login with Google</button>
-        <button @click="logout">Logout</button>
-        <button @click="getCurrentUser">Get current user</button>
-        <button @click="refreshToken">Refresh token</button>
-        <button @click="fetchUsers">Refresh users</button>
+  <div class="dashboard-layout">
+    <!-- Sidebar: Current User (compact) -->
+    <aside class="sidebar">
+      <h2 class="sidebar-title">Current User</h2>
+      <div v-if="currentUser" class="current-user-panel">
+        <img :src="currentUser.avatarUrl" alt="avatar" class="avatar-large" />
+        <div class="user-fields">
+          <div><span class="field-label">Name:</span> <span>{{ currentUser.name }}</span></div>
+          <div><span class="field-label">Email:</span> <span>{{ currentUser.email }}</span></div>
+        </div>
       </div>
-    </header>
-    <main>
-      <section>
-        <h2>Users</h2>
-        <div v-if="loading" class="loading">Loading users...</div>
-        <div v-if="error" class="error">{{ error }}</div>
-        <ul class="user-list" v-if="users.length">
-          <li v-for="user in users" :key="user.uuid" @click="selectUser(user)">
-            <img :src="user.avatarUrl" alt="avatar" class="avatar" />
-            <span>{{ user.name }}</span>
-            <span class="email">{{ user.email }}</span>
-            <span class="providers" v-if="user.providerIdentities && user.providerIdentities.length">
-              <span v-for="p in user.providerIdentities" :key="p.provider" class="provider-chip">{{ p.provider }}</span>
-            </span>
-          </li>
-        </ul>
-        <div v-if="selectedUser" class="user-details">
-          <h3>User details</h3>
-          <p><b>UUID:</b> {{ selectedUser.uuid }}</p>
-          <p><b>Name:</b> {{ selectedUser.name }}</p>
-          <p><b>Email:</b> {{ selectedUser.email }}</p>
-          <img :src="selectedUser.avatarUrl" alt="avatar" class="avatar-large" />
-          <p><b>Created:</b> {{ formatDate(selectedUser.createdAt) }}</p>
-          <p><b>Updated:</b> {{ formatDate(selectedUser.updatedAt) }}</p>
-          <div v-if="selectedUser.providerIdentities && selectedUser.providerIdentities.length">
-            <b>Provider Identities:</b>
-            <ul>
-              <li v-for="p in selectedUser.providerIdentities" :key="p.provider">
-                <span class="provider-chip">{{ p.provider }}</span> - <span>{{ p.providerUserId }}</span>
-              </li>
-            </ul>
-          </div>
-          <button @click="selectedUser = null">Close</button>
+      <div v-else class="no-data-panel">
+        <span>No user authenticated</span>
+      </div>
+      <div class="sidebar-actions">
+        <button class="action-btn" @click="loginWithGoogle">Login</button>
+        <button class="action-btn" @click="logout">Logout</button>
+        <button class="action-btn" @click="getCurrentUser">Get user</button>
+      </div>
+    </aside>
+
+    <!-- Main content: API Timeline -->
+    <main class="timeline-main-panel">
+      <header class="main-header">
+        <h1 class="main-title">API Timeline</h1>
+        <div class="actions-row">
+          <button class="action-btn" @click="refreshToken">Refresh token</button>
+          <button class="action-btn" @click="fetchUsers">Refresh users</button>
         </div>
-      </section>
-      <section class="logs-section">
-        <h2>API Logs & Responses</h2>
-        <div v-for="(log, idx) in logs" :key="idx" class="log-entry">
-          <div class="log-meta">
-            <span class="log-method">{{ log.method }}</span>
-            <span class="log-url">{{ log.url }}</span>
-            <span class="log-status" :class="{ success: log.status >= 200 && log.status < 300, error: log.status >= 400 }">{{ log.status }}</span>
-            <span class="log-time">{{ log.time }}</span>
-          </div>
-          <pre class="log-body">{{ log.body }}</pre>
-        </div>
-      </section>
-      <section v-if="currentUser" class="current-user-section">
-        <h2>Current User</h2>
-        <div class="user-details">
-          <p><b>UUID:</b> {{ currentUser.uuid }}</p>
-          <p><b>Name:</b> {{ currentUser.name }}</p>
-          <p><b>Email:</b> {{ currentUser.email }}</p>
-          <img :src="currentUser.avatarUrl" alt="avatar" class="avatar-large" />
-          <p><b>Created:</b> {{ formatDate(currentUser.createdAt) }}</p>
-          <p><b>Updated:</b> {{ formatDate(currentUser.updatedAt) }}</p>
-          <div v-if="currentUser.providerIdentities && currentUser.providerIdentities.length">
-            <b>Provider Identities:</b>
-            <ul>
-              <li v-for="p in currentUser.providerIdentities" :key="p.provider">
-                <span class="provider-chip">{{ p.provider }}</span> - <span>{{ p.providerUserId }}</span>
-              </li>
-            </ul>
+      </header>
+      <section class="timeline-section">
+        <div v-if="!Object.keys(groupedLogs).length" class="no-data-panel">No API requests yet</div>
+        <div v-for="(requests, endpoint) in groupedLogs" :key="endpoint" class="endpoint-group">
+          <div class="endpoint-title">{{ endpoint }}</div>
+          <div class="timeline-list">
+            <div v-for="(log, idx) in requests" :key="idx" class="timeline-entry" :class="log.statusClass" @click="toggleExpand(log)">
+              <div class="timeline-dot"></div>
+              <div class="timeline-summary">
+                <span class="timeline-method">{{ log.method }}</span>
+                <span class="timeline-status" :class="log.statusClass">{{ log.status }}</span>
+                <span class="timeline-time">{{ log.startTime }}</span>
+                <span class="timeline-duration">{{ log.duration ? log.duration + ' ms' : '' }}</span>
+                <span class="timeline-expand">{{ log.expanded ? '▼' : '▶' }}</span>
+              </div>
+              <transition name="expand">
+                <div v-if="log.expanded" class="timeline-details">
+                  <div v-if="log.params" class="timeline-params">
+                    <span class="params-label">Params:</span>
+                    <pre>{{ log.params }}</pre>
+                  </div>
+                  <div v-if="log.body" class="timeline-response">
+                    <span class="response-label">Response:</span>
+                    <pre>{{ log.body }}</pre>
+                  </div>
+                  <div v-if="log.error" class="timeline-error">{{ log.error }}</div>
+                </div>
+              </transition>
+            </div>
           </div>
         </div>
       </section>
@@ -80,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRuntimeConfig } from '#imports'
 
 const config = useRuntimeConfig()
@@ -89,18 +74,33 @@ const API_BASE = config.public.apiBase || 'http://localhost:3001'
 const users = ref<any[]>([])
 const loading = ref(false)
 const error = ref('')
-const selectedUser = ref<any | null>(null)
-const logs = ref<any[]>([])
 const currentUser = ref<any | null>(null)
+const logs = ref<any[]>([])
 
-function logApi({ method, url, status, body }) {
+function statusClass(status: number) {
+  if (status >= 200 && status < 300) return 'success'
+  if (status >= 400 && status < 500) return 'error'
+  if (status >= 500) return 'error'
+  return 'info'
+}
+
+function logApi({ method, url, status, body, params, startTime, duration, error }) {
   logs.value.unshift({
     method,
     url,
     status,
+    statusClass: statusClass(status),
     body: typeof body === 'string' ? body : JSON.stringify(body, null, 2),
-    time: new Date().toLocaleTimeString()
+    params: params ? (typeof params === 'string' ? params : JSON.stringify(params, null, 2)) : null,
+    startTime: startTime || new Date().toLocaleTimeString(),
+    duration,
+    error,
+    expanded: false
   })
+}
+
+function toggleExpand(log) {
+  log.expanded = !log.expanded
 }
 
 function loginWithGoogle() {
@@ -109,16 +109,16 @@ function loginWithGoogle() {
 
 async function logout() {
   const url = `${API_BASE}/api/auth/logout`
-  let status = 0, body = ''
+  let status = 0, body = '', start = Date.now()
   try {
     const res = await fetch(url, { credentials: 'include' })
     status = res.status
     body = await res.text()
     window.location.href = '/'
+    logApi({ method: 'GET', url, status, body, startTime: new Date(start).toLocaleTimeString(), duration: Date.now() - start })
   } catch (e) {
     body = e?.message || 'Network error.'
-  } finally {
-    logApi({ method: 'GET', url, status, body })
+    logApi({ method: 'GET', url, status, body, error: body, startTime: new Date(start).toLocaleTimeString(), duration: Date.now() - start })
   }
 }
 
@@ -126,7 +126,7 @@ async function fetchUsers() {
   loading.value = true
   error.value = ''
   const url = `${API_BASE}/api/users`
-  let status = 0, body = ''
+  let status = 0, body = '', start = Date.now()
   try {
     const res = await fetch(url, { credentials: 'include' })
     status = res.status
@@ -139,18 +139,19 @@ async function fetchUsers() {
       body = await res.text()
       error.value = 'Failed to fetch users.'
     }
+    logApi({ method: 'GET', url, status, body, startTime: new Date(start).toLocaleTimeString(), duration: Date.now() - start })
   } catch (e) {
     body = e?.message || 'Network error.'
     error.value = 'Network error.'
+    logApi({ method: 'GET', url, status, body, error: body, startTime: new Date(start).toLocaleTimeString(), duration: Date.now() - start })
   } finally {
-    logApi({ method: 'GET', url, status, body })
     loading.value = false
   }
 }
 
 async function getCurrentUser() {
   const url = `${API_BASE}/api/users/me`
-  let status = 0, body = ''
+  let status = 0, body = '', start = Date.now()
   try {
     const res = await fetch(url, { credentials: 'include' })
     status = res.status
@@ -162,240 +163,330 @@ async function getCurrentUser() {
       currentUser.value = null
       body = await res.text()
     }
+    logApi({ method: 'GET', url, status, body, startTime: new Date(start).toLocaleTimeString(), duration: Date.now() - start })
   } catch (e) {
     body = e?.message || 'Network error.'
-  } finally {
-    logApi({ method: 'GET', url, status, body })
+    logApi({ method: 'GET', url, status, body, error: body, startTime: new Date(start).toLocaleTimeString(), duration: Date.now() - start })
   }
 }
 
 async function refreshToken() {
   const url = `${API_BASE}/api/auth/refresh`
-  let status = 0, body = ''
+  let status = 0, body = '', start = Date.now()
   try {
     const res = await fetch(url, { method: 'POST', credentials: 'include' })
     status = res.status
     body = await res.text()
+    logApi({ method: 'POST', url, status, body, startTime: new Date(start).toLocaleTimeString(), duration: Date.now() - start })
   } catch (e) {
     body = e?.message || 'Network error.'
-  } finally {
-    logApi({ method: 'POST', url, status, body })
+    logApi({ method: 'POST', url, status, body, error: body, startTime: new Date(start).toLocaleTimeString(), duration: Date.now() - start })
   }
 }
 
-function selectUser(user: any) {
-  selectedUser.value = user
-}
-
-function formatDate(date: string) {
-  return new Date(date).toLocaleString()
-}
+// Agrupar logs por endpoint
+const groupedLogs = computed(() => {
+  const groups = {} as Record<string, any[]>
+  for (const log of logs.value) {
+    const endpoint = log.url.replace(API_BASE, '')
+    if (!groups[endpoint]) groups[endpoint] = []
+    groups[endpoint].push(log)
+  }
+  return groups
+})
 </script>
 
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 :root {
   color-scheme: dark;
 }
 body, html {
-  background: #181a20;
-  color: #f1f1f1;
-  font-family: 'Inter', Arial, sans-serif;
+  background: #16181d;
+  color: #e3eaff;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
   margin: 0;
   padding: 0;
+  min-height: 100vh;
 }
-.admin-container {
-  max-width: 1000px;
-  margin: 2rem auto;
-  background: #23262f;
-  border-radius: 16px;
-  box-shadow: 0 4px 32px #0008;
-  padding: 2rem;
-}
-header {
+.dashboard-layout {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #333;
-  padding-bottom: 1rem;
-  margin-bottom: 2rem;
+  flex-direction: row;
+  min-height: 100vh;
+  background: #16181d;
 }
-h1 {
-  font-size: 2rem;
-  letter-spacing: 1px;
-}
-.session-actions {
+.sidebar {
+  width: 220px;
+  background: #181a20;
+  border-right: 1.5px solid #23262f;
+  padding: 1.2rem 0.7rem 1.2rem 0.7rem;
   display: flex;
-  gap: 0.7rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 100vh;
 }
-.session-actions button {
-  background: #1a73e8;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 0.5rem 1.2rem;
+.sidebar-title {
   font-size: 1rem;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.session-actions button:hover {
-  background: #155ab6;
-}
-main {
-  min-height: 300px;
-}
-.refresh {
+  font-weight: 700;
+  color: #7ab7ff;
   margin-bottom: 1rem;
-  background: #333;
-  color: #fff;
-  border-radius: 6px;
-  border: none;
-  padding: 0.3rem 1rem;
-  cursor: pointer;
-  float: right;
+  letter-spacing: 0.5px;
 }
-.refresh:hover {
-  background: #444;
-}
-.loading {
-  color: #aaa;
-  margin: 1rem 0;
-}
-.error {
-  color: #ff6b6b;
-  margin: 1rem 0;
-}
-.user-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.user-list li {
+.current-user-panel {
+  width: 100%;
+  background: #20222b;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px #0002;
+  padding: 0.7rem 0.5rem 0.7rem 0.5rem;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  background: #23262f;
-  border: 1px solid #333;
-  border-radius: 8px;
-  margin-bottom: 0.7rem;
-  padding: 0.7rem 1rem;
-  cursor: pointer;
-  transition: background 0.2s, border 0.2s;
-}
-.user-list li:hover {
-  background: #1a1c22;
-  border-color: #1a73e8;
-}
-.avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  margin-right: 1rem;
-  border: 2px solid #333;
-}
-.email {
-  margin-left: auto;
-  color: #aaa;
-  font-size: 0.95em;
-}
-.providers {
-  margin-left: 1rem;
-  display: flex;
-  gap: 0.3rem;
-}
-.provider-chip {
-  background: #1a73e8;
-  color: #fff;
-  border-radius: 6px;
-  padding: 0.1rem 0.6rem;
-  font-size: 0.85em;
-  margin-right: 0.2rem;
-  display: inline-block;
-}
-.user-details {
-  background: #181a20;
-  border: 1px solid #333;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-top: 2rem;
-  box-shadow: 0 2px 16px #0004;
-}
-.user-details h3 {
-  margin-top: 0;
+  margin-bottom: 1.2rem;
 }
 .avatar-large {
-  width: 80px;
-  height: 80px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  margin: 1rem 0;
-  border: 3px solid #1a73e8;
-}
-.user-details button {
-  background: #333;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 0.4rem 1.2rem;
-  margin-top: 1rem;
-  cursor: pointer;
-}
-.user-details button:hover {
-  background: #444;
-}
-.logs-section {
-  margin-top: 2.5rem;
-}
-.logs-section h2 {
-  margin-bottom: 1rem;
-}
-.log-entry {
-  background: #181a20;
-  border: 1px solid #333;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  padding: 1rem;
-  font-size: 0.98em;
-  box-shadow: 0 1px 8px #0002;
-}
-.log-meta {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin-bottom: 0.5rem;
-  font-size: 0.95em;
-}
-.log-method {
-  font-weight: bold;
-  color: #1a73e8;
-}
-.log-url {
-  color: #aaa;
-}
-.log-status {
-  font-weight: bold;
-  padding: 0.1rem 0.5rem;
-  border-radius: 4px;
-}
-.log-status.success {
-  color: #0f0;
-}
-.log-status.error {
-  color: #ff6b6b;
-}
-.log-time {
-  color: #888;
-  margin-left: auto;
-}
-.log-body {
+  margin-bottom: 0.7rem;
+  border: 1.5px solid #1a73e8;
+  box-shadow: 0 2px 12px #1a73e830;
   background: #23262f;
-  color: #f1f1f1;
-  border-radius: 6px;
-  padding: 0.5rem;
-  overflow-x: auto;
+  object-fit: cover;
+}
+.user-fields {
+  width: 100%;
+  font-size: 0.93em;
+  color: #e3eaff;
+  margin-bottom: 0.3rem;
+}
+.field-label {
+  color: #7ab7ff;
+  font-weight: 600;
+  margin-right: 0.3em;
+}
+.no-data-panel {
+  color: #888;
+  background: #20222b;
+  border-radius: 10px;
+  padding: 1.2rem 1rem;
+  text-align: center;
+  font-size: 1em;
+  margin-top: 1.5rem;
+}
+.sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+  margin-top: 1.2rem;
+}
+.action-btn {
+  background: #23262f;
+  color: #7ab7ff;
+  border: 1px solid #23262f;
+  border-radius: 7px;
+  padding: 0.32rem 0.9rem;
+  font-size: 0.93rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border 0.15s;
+  outline: none;
+  margin-bottom: 0.1rem;
+}
+.action-btn:hover, .action-btn:focus {
+  background: #1a73e8;
+  color: #fff;
+  border: 1px solid #1a73e8;
+}
+.timeline-main-panel {
+  flex: 1 1 0;
+  padding: 1.2rem 0.7rem 1.2rem 0.7rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.main-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.2rem;
+}
+.main-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 1px;
+}
+.actions-row {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.timeline-section {
+  margin-top: 0.5rem;
+}
+.endpoint-group {
+  margin-bottom: 2.2rem;
+}
+.endpoint-title {
+  font-size: 1.01rem;
+  font-weight: 700;
+  color: #e3eaff;
+  margin-bottom: 0.7rem;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #23262f;
+  padding-bottom: 0.3rem;
+}
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  position: relative;
+  margin-left: 1.2rem;
+}
+.timeline-entry {
+  background: #20222b;
+  border: 1px solid #23262f;
+  border-radius: 10px;
+  box-shadow: 0 1px 6px #0002;
+  padding: 0.5rem 1rem 0.5rem 1.5rem;
   font-size: 0.97em;
   margin: 0;
+  transition: border 0.15s, box-shadow 0.15s;
+  position: relative;
+  cursor: pointer;
 }
-.current-user-section {
-  margin-top: 2.5rem;
+.timeline-entry.success {
+  border-left: 4px solid #00e676;
+}
+.timeline-entry.error {
+  border-left: 4px solid #ff6b6b;
+}
+.timeline-entry.info {
+  border-left: 4px solid #7ab7ff;
+}
+.timeline-dot {
+  position: absolute;
+  left: -1.2rem;
+  top: 1.1rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #23262f;
+  border: 2.5px solid #7ab7ff;
+  z-index: 2;
+}
+.timeline-entry.success .timeline-dot {
+  border-color: #00e676;
+}
+.timeline-entry.error .timeline-dot {
+  border-color: #ff6b6b;
+}
+.timeline-entry.info .timeline-dot {
+  border-color: #7ab7ff;
+}
+.timeline-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.97em;
+}
+.timeline-method {
+  font-weight: bold;
+  color: #7ab7ff;
+  letter-spacing: 0.5px;
+  font-size: 0.97em;
+}
+.timeline-status {
+  font-weight: bold;
+  padding: 0.1rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.97em;
+}
+.timeline-status.success {
+  color: #00e676;
+  background: rgba(0, 230, 118, 0.08);
+}
+.timeline-status.error {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.08);
+}
+.timeline-status.info {
+  color: #7ab7ff;
+  background: rgba(122, 183, 255, 0.08);
+}
+.timeline-time {
+  color: #b3c7e6;
+  font-size: 0.97em;
+}
+.timeline-duration {
+  color: #888;
+  font-size: 0.97em;
+  margin-left: 0.5rem;
+}
+.timeline-expand {
+  margin-left: auto;
+  color: #7ab7ff;
+  font-size: 1.1em;
+  font-weight: bold;
+  user-select: none;
+}
+.expand-enter-active, .expand-leave-active {
+  transition: max-height 0.2s cubic-bezier(.4,2,.6,1), opacity 0.2s;
+}
+.expand-enter-from, .expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+.expand-enter-to, .expand-leave-from {
+  max-height: 400px;
+  opacity: 1;
+}
+.timeline-details {
+  margin-top: 0.5rem;
+  padding-left: 0.2rem;
+}
+.timeline-params, .timeline-response {
+  margin-top: 0.2rem;
+}
+.params-label, .response-label {
+  color: #7ab7ff;
+  font-weight: 600;
+  font-size: 0.97em;
+  margin-right: 0.3em;
+}
+.timeline-error {
+  color: #ff6b6b;
+  font-size: 0.97em;
+  margin-top: 0.3rem;
+}
+pre {
+  background: #23262f;
+  color: #e3eaff;
+  border-radius: 7px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.97em;
+  margin: 0.2rem 0 0.2rem 0;
+  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+  box-shadow: 0 1px 6px #0001;
+  overflow-x: auto;
+}
+@media (max-width: 900px) {
+  .dashboard-layout {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100vw;
+    min-height: unset;
+    border: none;
+    padding: 1.2rem 0.7rem;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .timeline-main-panel {
+    padding: 1.2rem 0.7rem;
+  }
 }
 </style>
