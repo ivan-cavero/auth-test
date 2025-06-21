@@ -4,7 +4,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   runtimeConfig: {
     public: {
-      apiBase: process.env.API_BASE || 'https://apitest.timefly.dev'
+      apiBase: process.env.API_BASE || 'https://api-v2.timefly.dev'
     }
   }
 })

@@ -107,7 +107,7 @@ import SessionsPanel from './components/SessionsPanel.vue'
 import ApiKeysPanel from './components/ApiKeysPanel.vue'
 
 const config = useRuntimeConfig()
-const API_BASE = config.public.apiBase || 'https://apitest.timefly.dev'
+const API_BASE = config.public.apiBase || 'https://api-v2.timefly.dev'
 
 const section = ref('auth')
 const sectionComponent = computed(() => {
