@@ -9,7 +9,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - API_BASE=http://localhost:3001
+      - API_BASE=https://apitest.timefly.dev
     # Opcional: mount para desarrollo con hot reload
     # volumes:
     #   - .:/usr/src/app
@@ -26,7 +26,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - API_BASE=http://localhost:3001
+      - API_BASE=https://apitest.timefly.dev
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
