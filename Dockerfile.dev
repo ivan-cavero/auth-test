@@ -1,0 +1,17 @@
+# Dockerfile para desarrollo con hot reload
+FROM oven/bun:1 AS dev
+
+WORKDIR /usr/src/app
+
+# Instalar dependencias
+COPY package.json bun.lock* ./
+RUN bun install
+
+# Copiar código fuente
+COPY . .
+
+# Exponer puerto
+EXPOSE 3000
+
+# Comando por defecto para desarrollo
+CMD ["bun", "run", "dev"] 
